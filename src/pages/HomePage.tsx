@@ -24,6 +24,7 @@ import {
 import { useTrainingStatus } from '../hooks/useTrainingStatus';
 import { useWeather } from '../hooks/useWeather';
 import { ShortcutConfigs, defaultConfigs, ShortcutConfig } from '../types/settings';
+import { AppLauncher } from '@capacitor/app-launcher';
 
 interface CardData {
   icon: React.ReactNode;
@@ -74,22 +75,33 @@ const HomePage: React.FC = () => {
     { icon: <CloudSun size={18} />, label: weatherLabel }
   ];
 
-  const handleShortcut = (config: ShortcutConfig) => {
+  const handleShortcut = async (config: ShortcutConfig) => {
     if (config.type === 'internal') {
       navigate(config.value);
     } else if (config.type === 'url') {
       window.open(config.value, '_blank');
     } else if (config.type === 'app') {
-      // Try deep link
-      const deepLink = `intent://${config.value}#Intent;scheme=package;end`;
-      const a = document.createElement('a');
-      a.href = deepLink;
-      a.click();
+      try {
+        // Try to open the app using Capacitor AppLauncher
+        const result = await AppLauncher.openUrl({ url: `package:${config.value}` });
+        
+        if (!result.completed) {
+          // App not found - show dialog
+          setDialogMessage(`Die App "${config.label}" wurde nicht gefunden.`);
+          setDialogOpen(true);
+        }
+      } catch (error) {
+        // Fallback: try classic deep link
+        const deepLink = `intent://${config.value}#Intent;scheme=package;end`;
+        const a = document.createElement('a');
+        a.href = deepLink;
+        a.click();
 
-      setTimeout(() => {
-        setDialogMessage(`Die App "${config.label}" konnte nicht geöffnet werden.`);
-        setDialogOpen(true);
-      }, 1500);
+        setTimeout(() => {
+          setDialogMessage(`Die App "${config.label}" konnte nicht geöffnet werden.`);
+          setDialogOpen(true);
+        }, 1200);
+      }
     }
   };
 
