@@ -82,16 +82,18 @@ const HomePage: React.FC = () => {
       window.open(config.value, '_blank');
     } else if (config.type === 'app') {
       try {
-        // Try to open the app using Capacitor AppLauncher
-        const result = await AppLauncher.openUrl({ url: `package:${config.value}` });
+        // Use Capacitor AppLauncher to open the app
+        const result = await AppLauncher.openUrl({ 
+          url: `package:${config.value}` 
+        });
         
         if (!result.completed) {
-          // App not found - show dialog
+          // App not found
           setDialogMessage(`Die App "${config.label}" wurde nicht gefunden.`);
           setDialogOpen(true);
         }
       } catch (error) {
-        // Fallback: try classic deep link
+        // Fallback to deep link
         const deepLink = `intent://${config.value}#Intent;scheme=package;end`;
         const a = document.createElement('a');
         a.href = deepLink;

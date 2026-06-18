@@ -150,7 +150,7 @@ const SettingsPage: React.FC = () => {
         })}
       </div>
 
-      {/* Edit Dialog */}
+      {/* Edit Dialog - Simple manual input only */}
       <Dialog 
         open={editDialogOpen} 
         onClose={() => setEditDialogOpen(false)}
