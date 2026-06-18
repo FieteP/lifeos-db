@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit2 } from 'lucide-react';
+import { ArrowLeft, Edit2, Smartphone } from 'lucide-react';
 import { 
   Typography, 
   Dialog, 
@@ -12,9 +12,15 @@ import {
   Select,
   MenuItem,
   FormControl,
-  InputLabel
+  InputLabel,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
+  CircularProgress
 } from '@mui/material';
 import { ShortcutConfigs, defaultConfigs } from '../types/settings';
+import { AppPicker, InstalledApp } from '../plugins/AppPicker';
 
 const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -24,6 +30,14 @@ const SettingsPage: React.FC = () => {
   const [editType, setEditType] = useState<'internal' | 'app' | 'url'>('app');
   const [editValue, setEditValue] = useState('');
   const [editLabel, setEditLabel] = useState('');
+  
+  // Native App Picker
+  const [appPickerOpen, setAppPickerOpen] = useState(false);
+  const [installedApps, setInstalledApps] = useState<InstalledApp[]>([]);
+  const [filteredApps, setFilteredApps] = useState<InstalledApp[]>([]);
+  const [appSearch, setAppSearch] = useState('');
+  const [loadingApps, setLoadingApps] = useState(false);
+  const [isNativeAvailable, setIsNativeAvailable] = useState(false);
 
   // Load from localStorage
   useEffect(() => {
@@ -67,6 +81,63 @@ const SettingsPage: React.FC = () => {
 
   const resetToDefaults = () => {
     saveConfigs(defaultConfigs);
+  };
+
+  // Open native app picker
+  const openNativeAppPicker = async () => {
+    setLoadingApps(true);
+    setAppSearch('');
+    
+    try {
+      const result = await AppPicker.getInstalledApps();
+      const apps = result.apps || [];
+      
+      setInstalledApps(apps);
+      setFilteredApps(apps);
+      setIsNativeAvailable(apps.length > 0);
+      setAppPickerOpen(true);
+    } catch (error) {
+      console.error('Failed to get installed apps:', error);
+      setIsNativeAvailable(false);
+      setInstalledApps([]);
+      setFilteredApps([]);
+      setAppPickerOpen(true);
+    }
+    
+    setLoadingApps(false);
+  };
+
+  // Filter apps when searching
+  useEffect(() => {
+    if (!appSearch) {
+      setFilteredApps(installedApps);
+    } else {
+      const filtered = installedApps.filter(app =>
+        app.appName.toLowerCase().includes(appSearch.toLowerCase()) ||
+        app.packageName.toLowerCase().includes(appSearch.toLowerCase())
+      );
+      setFilteredApps(filtered);
+    }
+  }, [appSearch, installedApps]);
+
+  // Select app from native picker
+  const selectNativeApp = (app: InstalledApp) => {
+    if (!currentEditKey) return;
+
+    const newConfigs = {
+      ...configs,
+      [currentEditKey]: {
+        type: 'app' as const,
+        value: app.packageName,
+        label: app.appName
+      }
+    };
+
+    saveConfigs(newConfigs);
+    setAppPickerOpen(false);
+    setEditDialogOpen(false);
+    setCurrentEditKey(null);
+    setAppSearch('');
   };
 
   const shortcuts = [
@@ -168,10 +239,26 @@ const SettingsPage: React.FC = () => {
               onChange={(e) => setEditType(e.target.value as 'internal' | 'app' | 'url')}
             >
               <MenuItem value="internal">Intern (Life OS Seite)</MenuItem>
-              <MenuItem value="app">App (Deep Link / Paketname)</MenuItem>
+              <MenuItem value="app">App (vom Gerät auswählen)</MenuItem>
               <MenuItem value="url">Website (URL)</MenuItem>
             </Select>
           </FormControl>
+
+          {editType === 'app' && (
+            <Button 
+              fullWidth 
+              variant="contained" 
+              startIcon={<Smartphone size={18} />}
+              onClick={openNativeAppPicker}
+              sx={{ 
+                mb: 2, 
+                backgroundColor: 'var(--accent)',
+                '&:hover': { backgroundColor: '#4a6ad9' }
+              }}
+            >
+              App vom Gerät auswählen
+            </Button>
+          )}
 
           <TextField
             fullWidth
@@ -180,7 +267,7 @@ const SettingsPage: React.FC = () => {
             onChange={(e) => setEditValue(e.target.value)}
             placeholder={
               editType === 'app' 
-                ? 'ticktick oder com.google.android.calendar' 
+                ? 'com.google.android.calendar' 
                 : editType === 'url' 
                   ? 'https://example.com' 
                   : '/training'
@@ -206,6 +293,75 @@ const SettingsPage: React.FC = () => {
             sx={{ backgroundColor: 'var(--accent)' }}
           >
             Speichern
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Native App Picker Dialog */}
+      <Dialog 
+        open={appPickerOpen} 
+        onClose={() => {
+          setAppPickerOpen(false);
+          setAppSearch('');
+        }}
+        PaperProps={{ className: 'dialog-paper' }}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>
+          {isNativeAvailable ? 'App vom Gerät auswählen' : 'Native App-Auswahl nicht verfügbar'}
+        </DialogTitle>
+        <DialogContent>
+          {!isNativeAvailable && (
+            <Typography sx={{ color: 'var(--text-secondary)', mb: 2 }}>
+              Die App-Auswahl vom Gerät ist nur in der Android-Version verfügbar. 
+              Bitte gib den Paketnamen manuell ein.
+            </Typography>
+          )}
+
+          {loadingApps ? (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
+              <CircularProgress sx={{ color: 'var(--accent)' }} />
+            </div>
+          ) : isNativeAvailable ? (
+            <>
+              <TextField
+                fullWidth
+                placeholder="App suchen..."
+                value={appSearch}
+                onChange={(e) => setAppSearch(e.target.value)}
+                sx={{ mb: 2 }}
+              />
+
+              <List sx={{ maxHeight: 400, overflow: 'auto' }}>
+                {filteredApps.length > 0 ? (
+                  filteredApps.map((app, index) => (
+                    <ListItem key={index} disablePadding>
+                      <ListItemButton onClick={() => selectNativeApp(app)}>
+                        <ListItemText 
+                          primary={app.appName} 
+                          secondary={app.packageName}
+                          primaryTypographyProps={{ color: 'white' }}
+                          secondaryTypographyProps={{ color: '#A8A8A8', fontSize: '12px' }}
+                        />
+                      </ListItemButton>
+                    </ListItem>
+                  ))
+                ) : (
+                  <ListItem>
+                    <ListItemText primary="Keine Apps gefunden" sx={{ color: '#A8A8A8' }} />
+                  </ListItem>
+                )}
+              </List>
+            </>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => {
+            setAppPickerOpen(false);
+            setAppSearch('');
+          }}>
+            Abbrechen
           </Button>
         </DialogActions>
       </Dialog>
